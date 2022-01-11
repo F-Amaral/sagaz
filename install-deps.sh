@@ -47,9 +47,10 @@ OSTYPE="$(uname)"
 if [ "$OSTYPE" == "Darwin" ];
 then
     if [ -x "$(command -v brew)" ]; then
+        echo "Installing dependencies with brew"
         brew install vips pkg-config
     else 
-        echo "brew not installed"
+        echo "Command brew not installed"
         exit
     fi
 
