@@ -1,41 +1,73 @@
-package main
+package pdfparser
 
 import (
-	"fmt"
+	"errors"
 	"io/ioutil"
-	"os"
 
 	"github.com/davidbyttow/govips/v2/vips"
 )
 
-func checkError(err error) {
-	if err != nil {
-		fmt.Println("error:", err)
-		os.Exit(1)
-	}
+const (
+	writePermission = 0644
+)
+
+var EmptyPdfBytesError = errors.New("pdf bytes not set")
+
+type PdfParser struct {
+	pdfBytes []byte
 }
 
-func main() {
+func New() *PdfParser {
+	return &PdfParser{}
+}
+
+func (s *PdfParser) LoadPdfBytes(pathFileName string) error {
+	pdfBytes, err := ioutil.ReadFile(pathFileName)
+	if err != nil {
+		return err
+	}
+
+	s.pdfBytes = pdfBytes
+	return nil
+}
+
+func (s *PdfParser) SetPdfBytes(pdfBytes []byte) {
+	s.pdfBytes = pdfBytes
+}
+
+func (s *PdfParser) ConvertToFile(pathFileName string) error {
+	imageBytes, err := s.ConvertToBytes()
+	if err != nil {
+		return err
+	}
+
+	return ioutil.WriteFile(pathFileName, imageBytes, writePermission)
+}
+
+func (s *PdfParser) ConvertToBytes() ([]byte, error) {
+	if len(s.pdfBytes) == 0 {
+		return nil, EmptyPdfBytesError
+	}
+
 	vips.Startup(nil)
 	defer vips.Shutdown()
 
-	byteSlices, err := ioutil.ReadFile("internal/assets/pdfs/sample1.pdf")
-	if err != nil {
-		fmt.Println("Got error while opening file:", err)
-		os.Exit(1)
-	}
-
 	params := &vips.ImportParams{}
 	params.SvgUnlimited.Set(true)
-	image1, err := vips.LoadImageFromBuffer(byteSlices, params)
-	checkError(err)
+	image, err := vips.LoadImageFromBuffer(s.pdfBytes, params)
+	if err != nil {
+		return nil, err
+	}
 
-	err = image1.Resize(5, vips.KernelMitchell)
-	checkError(err)
+	err = image.Resize(5, vips.KernelMitchell)
+	if err != nil {
+		return nil, err
+	}
 
-	// Rotate the picture upright and reset EXIF orientation tag
-	err = image1.AutoRotate()
-	checkError(err)
+	err = image.AutoRotate()
+	if err != nil {
+		return nil, err
+	}
 
 	ep := &vips.PngExportParams{
 		Compression: 0,
@@ -45,7 +77,10 @@ func main() {
 		Bitdepth:    2,
 	}
 
-	image1bytes, _, err := image1.ExportPng(ep)
-	err = ioutil.WriteFile("output.png", image1bytes, 0644)
-	checkError(err)
+	imageBytes, _, err := image.ExportPng(ep)
+	if err != nil {
+		return nil, err
+	}
+
+	return imageBytes, nil
 }
